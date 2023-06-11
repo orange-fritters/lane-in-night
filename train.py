@@ -7,10 +7,10 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from torch.utils.data import random_split, DataLoader
 
+import os
 import numpy as np
 import time
 import argparse
-
 
 from dataload.dataset import LaneDataset
 from model.model import STM
@@ -18,16 +18,19 @@ from model.model import STM
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="LIN")
-    parser.add_argument("-root", type=str, help="path to youtube-vos",default='data/train_f/data/1.Training')
-    parser.add_argument("-imset", type=str, help="path to youtube-vos",default='image_paths.csv')
-    parser.add_argument("-batch", type=int, help="batch size",default=4)
-    parser.add_argument("-log_iter", type=int, help="log per x iters",default=500)
-    parser.add_argument("-learning_rate", type=float, help="learning rate",default=1e-4)
-    parser.add_argument("-epoch", type=int, help="epochs",default=20)
+    parser.add_argument("-root", type=str, help="path to youtube-vos", default='data/train_f/data/1.Training')
+    parser.add_argument("-imset", type=str, help="path to youtube-vos", default='image_paths.csv')
+    parser.add_argument("-batch", type=int, help="batch size", default=4)
+    parser.add_argument("-log_iter", type=int, help="log per x iters", default=500)
+    parser.add_argument("-learning_rate", type=float, help="learning rate", default=1e-4)
+    parser.add_argument("-num_epochs", type=int, help="epochs", default=20)
+    parser.add_argument("-save_dir", type=str, help="save directory", default='result/')
+    parser.add_argument("-exp_name", type=str, help="experiment name", default='exp_1')
 
     return parser.parse_args()
 
 def train_epoch(args, model, data_loader, optimizer, loss_type, epoch, device):
+    print("Training...")
     model.train()
     start_epoch = start_iter = time.perf_counter()
     len_loader = len(data_loader)
@@ -38,37 +41,37 @@ def train_epoch(args, model, data_loader, optimizer, loss_type, epoch, device):
 
         frames = frames.to(device)
         masks = masks.to(device)
-
         Estimates = torch.zeros_like(masks)
-        Estimates[..., 0] = masks[..., 0]
+        Estimates[:, 0, ...] = masks[:, 0, ...]
         
-        n0_key, n0_val = model("memorize", frames[..., 0], Estimates[..., 0])
-        n1_logit = model("segment", frames[..., 1], n0_key, n0_val)
-        n1_label = masks[..., 1]
+        n0_key, n0_val = model("memorize", frames[:, 0, ...], Estimates[:, 0, ...])
+        n1_logit = model("segment", frames[:, 1, ...], n0_key, n0_val)
+        n1_label = masks[:, 1, ...]
+
         loss = loss_type(n1_logit, n1_label)
 
-        Estimates[..., 1] = F.softmax(n1_logit, dim=1).detach()
+        Estimates[:, 1, ...] = torch.sigmoid(n1_logit).detach()
 
-        n1_key, n1_val = model("memorize", frames[..., 1], Estimates[..., 1])
-        n2_logit = model("segment", frames[..., 2], n1_key, n1_val)
-        n2_label = masks[..., 2]
+        n1_key, n1_val = model("memorize", frames[:, 1, ...], Estimates[:, 1, ...])
+        n2_logit = model("segment", frames[:, 2, ...], n1_key, n1_val)
+        n2_label = masks[:, 2, ...]
         loss += loss_type(n2_logit, n2_label)
 
-        Estimates[..., 2] = F.softmax(n2_logit, dim=1).detach()
+        Estimates[:, 2, ...] = torch.sigmoid(n2_logit).detach()
 
-        n2_key, n2_val = model("memorize", frames[..., 2], Estimates[..., 2])
-        n3_logit = model("segment", frames[..., 3], n2_key, n2_val)
-        n3_label = masks[..., 3]
+        n2_key, n2_val = model("memorize", frames[:, 2, ...], Estimates[:, 2, ...])
+        n3_logit = model("segment", frames[:, 3, ...], n2_key, n2_val)
+        n3_label = masks[:, 3, ...]
         loss += loss_type(n3_logit, n3_label)
 
-        Estimates[..., 3] = F.softmax(n3_logit, dim=1).detach()
+        Estimates[:, 3, ...] = torch.sigmoid(n3_logit).detach()
 
-        n3_key, n3_val = model("memorize", frames[..., 3], Estimates[..., 3])
-        n4_logit = model("segment", frames[..., 4], n3_key, n3_val)
-        n4_label = masks[..., 4]
+        n3_key, n3_val = model("memorize", frames[:, 3, ...], Estimates[:, 3, ...])
+        n4_logit = model("segment", frames[:, 4, ...], n3_key, n3_val)
+        n4_label = masks[:, 4, ...]
         loss += loss_type(n4_logit, n4_label)
 
-        Estimates[..., 4] = F.softmax(n4_logit, dim=1).detach()
+        Estimates[:, 4, ...] = torch.sigmoid(n4_logit).detach()
 
 
         optimizer.zero_grad()
@@ -78,7 +81,7 @@ def train_epoch(args, model, data_loader, optimizer, loss_type, epoch, device):
 
         if iter % args.log_iter == 0:
             runtime = time.perf_counter() - start_iter
-            left_sec = runtime / args.report_interval * (len_loader - iter)
+            left_sec = runtime / args.log_iter * (len_loader - iter)
             hour = left_sec // 3600
             minute = (left_sec - left_sec // 3600 * 3600) // 60
             print(
@@ -103,8 +106,8 @@ def train_epoch(args, model, data_loader, optimizer, loss_type, epoch, device):
     return total_loss, time.perf_counter() - start_epoch
 
 
-
 def validate(model, data_loader, loss_type, epoch, device):
+    print("Validating...")
     model.eval()
     start_epoch = start_iter = time.perf_counter()
     len_loader = len(data_loader)
@@ -115,43 +118,43 @@ def validate(model, data_loader, loss_type, epoch, device):
 
         frames = frames.to(device)
         masks = masks.to(device)
-
         Estimates = torch.zeros_like(masks)
-        Estimates[..., 0] = masks[..., 0]
+        Estimates[:, 0, ...] = masks[:, 0, ...]
         
-        n0_key, n0_val = model("memorize", frames[..., 0], Estimates[..., 0])
-        n1_logit = model("segment", frames[..., 1], n0_key, n0_val)
-        n1_label = masks[..., 1]
+        n0_key, n0_val = model("memorize", frames[:, 0, ...], Estimates[:, 0, ...])
+        n1_logit = model("segment", frames[:, 1, ...], n0_key, n0_val)
+        n1_label = masks[:, 1, ...]
+
         loss = loss_type(n1_logit, n1_label)
 
-        Estimates[..., 1] = F.softmax(n1_logit, dim=1).detach()
+        Estimates[:, 1, ...] = torch.sigmoid(n1_logit).detach()
 
-        n1_key, n1_val = model("memorize", frames[..., 1], Estimates[..., 1])
-        n2_logit = model("segment", frames[..., 2], n1_key, n1_val)
-        n2_label = masks[..., 2]
+        n1_key, n1_val = model("memorize", frames[:, 1, ...], Estimates[:, 1, ...])
+        n2_logit = model("segment", frames[:, 2, ...], n1_key, n1_val)
+        n2_label = masks[:, 2, ...]
         loss += loss_type(n2_logit, n2_label)
 
-        Estimates[..., 2] = F.softmax(n2_logit, dim=1).detach()
+        Estimates[:, 2, ...] = torch.sigmoid(n2_logit).detach()
 
-        n2_key, n2_val = model("memorize", frames[..., 2], Estimates[..., 2])
-        n3_logit = model("segment", frames[..., 3], n2_key, n2_val)
-        n3_label = masks[..., 3]
+        n2_key, n2_val = model("memorize", frames[:, 2, ...], Estimates[:, 2, ...])
+        n3_logit = model("segment", frames[:, 3, ...], n2_key, n2_val)
+        n3_label = masks[:, 3, ...]
         loss += loss_type(n3_logit, n3_label)
 
-        Estimates[..., 3] = F.softmax(n3_logit, dim=1).detach()
+        Estimates[:, 3, ...] = torch.sigmoid(n3_logit).detach()
 
-        n3_key, n3_val = model("memorize", frames[..., 3], Estimates[..., 3])
-        n4_logit = model("segment", frames[..., 4], n3_key, n3_val)
-        n4_label = masks[..., 4]
+        n3_key, n3_val = model("memorize", frames[:, 3, ...], Estimates[:, 3, ...])
+        n4_logit = model("segment", frames[:, 4, ...], n3_key, n3_val)
+        n4_label = masks[:, 4, ...]
         loss += loss_type(n4_logit, n4_label)
 
-        Estimates[..., 4] = F.softmax(n4_logit, dim=1).detach()
+        Estimates[:, 4, ...] = torch.sigmoid(n4_logit).detach()
 
         total_loss += loss.item()
 
         if iter % args.log_iter == 0:
             runtime = time.perf_counter() - start_iter
-            left_sec = runtime / args.report_interval * (len_loader - iter)
+            left_sec = runtime / args.log_iter * (len_loader - iter)
             hour = left_sec // 3600
             minute = (left_sec - left_sec // 3600 * 3600) // 60
             print(
@@ -170,10 +173,24 @@ def validate(model, data_loader, loss_type, epoch, device):
                 module.eval()
             if isinstance(module, torch.nn.modules.BatchNorm3d):
                 module.eval()
+
     
     total_loss /= len_loader
 
     return total_loss, time.perf_counter() - start_epoch
+
+
+def save_model(model, optimizer, epoch, loss, args):
+    save_dir = os.path.join(args.save_dir, args.exp_name)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    save_path = os.path.join(save_dir, f'{epoch:03d}_{loss:.3f}.pth')
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': loss
+    }, save_path)
 
 
 def train(args):
@@ -202,21 +219,32 @@ def train(args):
     model.to(device=device)
     print("[] Model Loaded...")
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    loss_type = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    loss_type = nn.BCEWithLogitsLoss()
+    val_loss_type = nn.BCEWithLogitsLoss()
 
     start_epoch = 0
     print("[] Train start...")
+    best_val_loss = 1000
     for epoch in range(start_epoch, args.num_epochs):
-        train_loss, train_time = train_epoch(model, 
+        train_loss, train_time = train_epoch(args,
+                                             model, 
                                              train_loader, 
                                              optimizer, 
                                              loss_type, 
                                              epoch, 
                                              device, 
-                                             args)
+                                             )
         val_loss, val_time = validate(model, 
-                                      val_loader)
+                                      val_loader,
+                                      val_loss_type,
+                                      epoch,
+                                      device)
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            print("New Best model ...")
+            save_model(model, optimizer, epoch, val_loss, args)
 
         print(
             f'Epoch=[{epoch + 1:2d}/{args.num_epochs:2d}] '

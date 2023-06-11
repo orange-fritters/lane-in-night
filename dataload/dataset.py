@@ -31,7 +31,12 @@ class LaneDataset(data.Dataset):
         frame_list = []
         for i in range(1, 6):
             img = data_row[f'img_{i}']
-            img = np.array(Image.open(img).convert('RGB'))
+            try:
+                img = np.array(Image.open(img).convert('RGB'))
+            except OSError:
+                print("OSError occured, using other image")
+                img = data_row[f'img_{i-1}'] if i > 1 else data_row[f'img_{i+1}']
+                img = np.array(Image.open(img).convert('RGB'))
             frame_list.append(img)
         else:
             img_height, img_width, _ = img.shape
@@ -48,7 +53,7 @@ class LaneDataset(data.Dataset):
         masks = np.expand_dims(np.array(masks), axis=1)
 
         frames = torch.from_numpy(np.transpose(frames.copy(), (0, 3, 1, 2)).copy()).float() # (5, 3, 224, 224)
-        masks = torch.from_numpy(masks).copy().float() # (5, 1, 224, 224)
+        masks = torch.from_numpy(masks).float() # (5, 1, 224, 224)
 
         return frames, masks
 

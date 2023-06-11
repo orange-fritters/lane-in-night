@@ -30,7 +30,7 @@ def ToCuda(xs):
         return xs
 
 
-def pad_divide_by(in_list, d=16, in_size=(384, 384)):
+def pad_divide_by(in_list, d=16, in_size=(224, 224)):
     out_list = []
     h, w = in_size
 

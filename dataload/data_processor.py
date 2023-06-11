@@ -26,8 +26,9 @@ with open('image_paths.csv', 'w', newline='') as csvfile:
                 img_paths = [os.path.join(root, jpg_files[j]) for j in range(i, i+min_images)]
                 
                 # Prepare paths for labels
+                # label is .json file, so we need to replace the extension
                 label_root = root.replace(raw_root, labels_root)
-                label_paths = [os.path.join(label_root, jpg_files[j]) for j in range(i, i+min_images)]
+                label_paths = [os.path.join(label_root, jpg_files[j].replace('.jpg', '.json')) for j in range(i, i+min_images)]
 
                 # Write to CSV
                 writer.writerow({

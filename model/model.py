@@ -139,6 +139,7 @@ class Memory(nn.Module):
         super(Memory, self).__init__()
  
     def forward(self, m_in, m_out, q_in, q_out):  # m_in: o, c, t, h, w
+        # m4, viz = self.Memory(keys[0], values[0], k4e, v4e)
         B, D_e, T, H, W = m_in.size()
         _, D_o, _, _, _ = m_out.size()
 
@@ -185,41 +186,41 @@ class STM(nn.Module):
         self.Memory = Memory()
         self.Decoder = Decoder(256,scale_rate)
 
-    def Pad_memory(self, mems):
+    def Pad_memory(self, mems, B):
         pad_mems = []
-        for mem in mems:
-            pad_mem = helper.ToCuda(torch.zeros(1, 1, mem.size()[1], 1, mem.size()[2], mem.size()[3]))
-            pad_mem[0, :, :, 0] = mem
+        for mem in mems: # [keys, values]
+            pad_mem = helper.ToCuda(torch.zeros(B, 1, mem.size()[1], 1, mem.size()[2], mem.size()[3]))
+            for b in range(B):
+                pad_mem[b, :, :, 0] = mem[b]
             pad_mems.append(pad_mem)
         return pad_mems
 
     def memorize(self, frame, masks): 
         # memorize a frame 
-        
-        num_objects = 1
-        _, _, H, W = masks.shape # B = 1
+        B, _, H, W = masks.shape # B = 1
 
         (frame, masks), _ = helper.pad_divide_by([frame, masks], 16, (frame.size()[2], frame.size()[3]))
 
         r4, _, _, _, _ = self.Encoder_Memory(frame, masks)
         k4, v4 = self.KV_M_r4(r4) # num_objects, 128 and 512, H/16, W/16
-        k4, v4 = self.Pad_memory([k4, v4])
+        k4, v4 = self.Pad_memory([k4, v4], B)
         return k4, v4
 
     def segment(self, frame, keys, values): 
-        # 찍어보니까 1, 1, 128, 1, 14, 14 나옴
-        _, _, keydim, T, H, W = keys.shape # B = 1
+        # 찍어보니까 B, 1, 128, 1, 14, 14 나옴
+        B, _, keydim, T, H, W = keys.shape # B = 1
         # pad
         [frame], pad = helper.pad_divide_by([frame], 16, (frame.size()[2], frame.size()[3]))
         r4, r3, r2, _, _ = self.Encoder_Q(frame)
-        k4, v4 = self.KV_Q_r4(r4)   # 1, dim, H/16, W/16
+        k4, v4 = self.KV_Q_r4(r4)   # B, dim, H/16, W/16
         
         # expand to ---  no, c, h, w
-        k4e, v4e = k4.expand(1,-1,-1,-1), v4.expand(1,-1,-1,-1) 
-        r3e, r2e = r3.expand(1,-1,-1,-1), r2.expand(1,-1,-1,-1)
+        k4e, v4e = k4.expand(B,-1,-1,-1), v4.expand(B,-1,-1,-1) 
+        r3e, r2e = r3.expand(B,-1,-1,-1), r2.expand(B,-1,-1,-1)
         
         # memory select kv:(1, K, C, T, H, W)
-        m4, viz = self.Memory(keys[0], values[0], k4e, v4e)
+        # k4e.size() = 4, 128, 14, 14 // v4e.size() = 4, 512, 14, 14
+        m4, viz = self.Memory(keys[:, 0, ...], values[:, 0, ...], k4e, v4e)
         logits = self.Decoder(m4, r3e, r2e)
         ps = F.softmax(logits, dim=1)[:,1] # no(1), h, w  
         
@@ -234,10 +235,9 @@ class STM(nn.Module):
         return logit    
 
     def soft_aggregation(self, ps):
-        num_objects, H, W = ps.shape
-        em = helper.ToCuda(torch.zeros(1, 1, H, W)) 
-        em[0,0] =  torch.prod(1-ps, dim=0) # bg prob
-        em[0,1:num_objects+1] = ps # obj prob
+        B, H, W = ps.shape
+        em = helper.ToCuda(torch.zeros(B, 1, H, W))  # Single channel for object probabilities
+        em[:, 0] = ps # obj prob
         em = torch.clamp(em, 1e-7, 1-1e-7)
         logit = torch.log((em /(1-em)))
         return logit

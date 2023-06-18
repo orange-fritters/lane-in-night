@@ -113,19 +113,20 @@ class LaneDataset(data.Dataset):
         return len(self.data_dir)
     
     def get_mask(self,
-                 file_name : str,
-                 img_height : int,
-                 img_width : int,
-                 line_thickness : int):
-        
+             file_name: str,
+             img_height: int,
+             img_width: int,
+             line_thickness: int):
+
         with open(file_name, 'r') as f:
             label = json.load(f)
 
         mask = np.zeros((img_height, img_width), dtype=np.uint8)
-        for item in label["data_set_info"]["data"]:
-            if item["value"]["extra"]["label"] == "차선":
-                points = item["value"]["points"]
+
+        for item in label["annotations"]:
+            if "lane" in item["class"]:
+                points = item["data"]
                 points = np.array([(int(point['x']), int(point['y'])) for point in points], np.int32)
-                cv2.polylines(mask, [points], isClosed=True, color=1, thickness=line_thickness)
+                cv2.polylines(mask, [points], isClosed=False, color=1, thickness=line_thickness)
 
         return mask

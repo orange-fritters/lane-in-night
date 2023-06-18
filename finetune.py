@@ -12,23 +12,34 @@ import numpy as np
 import time
 import argparse
 
-from dataload.dataset import LaneDataset
+from dataload.dataset_video import LaneDataset
 from model.model import STM
 
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="LIN")
-    parser.add_argument("-root", type=str, help="path to data", default='data/train_f/data/1.Training')
-    parser.add_argument("-imset", type=str, help="path to annotation", default='image_paths.csv')
+    parser.add_argument("-root", type=str, help="path to data", default='data/lane_detected/Training/Raw/c_1280_720_night_train_1')
+    parser.add_argument("-imset", type=str, help="path to annotation", default='image_paths_2.csv')
     parser.add_argument("-batch", type=int, help="batch size", default=8)
-    parser.add_argument("-log_iter", type=int, help="log per x iters", default=20)
-    parser.add_argument("-learning_rate", type=float, help="learning rate", default=1e-4)
-    parser.add_argument("-num_epochs", type=int, help="epochs", default=10)
+    parser.add_argument("-log_iter", type=int, help="log per x iters", default=100)
+    parser.add_argument("-learning_rate", type=float, help="learning rate", default=5e-4)
+    parser.add_argument("-num_epochs", type=int, help="epochs", default=12)
     parser.add_argument("-num_workers", type=int, help="num workers", default=4)
     parser.add_argument("-save_dir", type=str, help="save directory", default='result/')
-    parser.add_argument("-exp_name", type=str, help="experiment name", default='exp_2')
+    parser.add_argument("-exp_name", type=str, help="experiment name", default='exp_4')
 
     return parser.parse_args()
+
+
+def load_model(model, optimizer, load_path):
+    checkpoint = torch.load(load_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epoch = checkpoint['epoch']
+    loss = checkpoint['loss']
+    
+    return model, optimizer, epoch, loss
+
 
 def train_epoch(args, model, data_loader, optimizer, loss_type, epoch, device):
     print("Training...")
@@ -218,13 +229,14 @@ def train(args):
     
     model = STM()
     model.to(device=device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    model, _, epoch, loss = load_model(model, optimizer, 'result/exp_3/006_0.550.pth')
     print("[] Model Loaded...")
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     loss_type = nn.BCEWithLogitsLoss()
     val_loss_type = nn.BCEWithLogitsLoss()
 
-    start_epoch = 0
+    start_epoch = epoch
     print("[] Train start...")
     best_val_loss = 1000
     for epoch in range(start_epoch, args.num_epochs):

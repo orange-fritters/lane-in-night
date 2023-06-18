@@ -71,7 +71,7 @@ class RandomSizedCrop(object):
     
 
 class AugHeavy(object):
-    def __init__(self):
+    def __init__(self, to_crop=True):
         self.affinity = iaa.Sequential([
             iaa.Sometimes(
                 0.5,
@@ -93,12 +93,24 @@ class AugHeavy(object):
 
         self.crop = RandomSizedCrop([0.80, 1.1], 224)
         self.flip = Flip(0.5)
+        
+        self.to_crop = to_crop
+
 
     def __call__(self, images, labels):
-        images, labels = self.flip(images, labels)
-        for i in range(5):
-            images[i], labels[i] = self.affinity(image = images[i],
-                                                 segmentation_maps = labels[i][np.newaxis, :, :, np.newaxis])
-            labels[i] = labels[i][0, :, :, 0]
-        images, labels = self.crop(images, labels)
+        if (self.to_crop):
+            images, labels = self.flip(images, labels)
+            for i in range(5):
+                images[i], labels[i] = self.affinity(image = images[i],
+                                                    segmentation_maps = labels[i][np.newaxis, :, :, np.newaxis])
+                labels[i] = labels[i][0, :, :, 0]
+                images, labels = self.crop(images, labels)
+        else: 
+            for i in range(5): 
+                h, w = labels[i].shape
+                images[i] = (cv2.resize(images[i], (w, h), interpolation=cv2.INTER_LINEAR))
+                images[i] = images[i]/255.
+                labels[i] = Image.fromarray(labels[i]).resize((w, h), resample=Image.NEAREST)
+                labels[i] = np.asarray(labels[i], dtype=np.int8)
         return images, labels
+        

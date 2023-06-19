@@ -93,7 +93,7 @@ def reconstruct_image(patches, canvas, img_type="original"):
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="LIN")
-    parser.add_argument("-model_dir", type=str, help="path to pth", default='/home/mindong/lane-in-night/result/exp_3/006_0.550.pth')
+    parser.add_argument("--model_dir", type=str, help="path to pth", default='/home/mindong/lane-in-night/result/exp_1/006_0.140.pth')
 
     return parser.parse_args()
 
@@ -124,7 +124,7 @@ def visualize(args):
     
     model.eval()
     for iter, data in enumerate(test_loader):
-        if iter == 100:
+        if iter == 50:
             break
         original_frames, estimated_masks, ground_truth = {}, {}, {}
         img_height, img_width = data['img']

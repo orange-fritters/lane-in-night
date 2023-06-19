@@ -12,7 +12,7 @@ def compute_f1_score(gt, est):
 
 def plot_images():
     save_dir = '/home/mindong/lane-in-night/report/results_night_fine_tuned'
-    for i in range(100):
+    for i in range(50):
         if (i + 1) % 10 == 0:
             print(f"Processing {i + 1}th image...")
         fig, axs = plt.subplots(3, 4, figsize=(12, 5))

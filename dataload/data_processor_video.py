@@ -5,10 +5,10 @@ import argparse
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="LIN")
-    parser.add_argument("-root", type=str, help="path to data", default='data/lane_detected/Training/Raw/c_1280_720_night_train_1')
-    parser.add_argument("-first", type=int, help="path to annotation", default=9936538)
-    parser.add_argument("-last", type=int, help="path to annotation", default=9936598)
-    parser.add_argument("-version", type=int, help="path to annotation", default=2)
+    parser.add_argument("--root", type=str, help="path to data", default='data/lane_detected/Training/Raw/c_1280_720_night_train_1')
+    parser.add_argument("--first", type=int, help="path to annotation", default=9954803)
+    parser.add_argument("--last", type=int, help="path to annotation", default=9954866)
+    parser.add_argument("--version", type=int, help="path to annotation", default=2)
 
     return parser.parse_args()
 

@@ -6,7 +6,7 @@ import numpy as np
 from torch.utils.data import random_split, DataLoader
 from cv2 import VideoWriter, VideoWriter_fourcc
 
-from dataload.dataset_video import LaneDataset
+from dataload.dataset import LaneDataset
 from model.model import STM
 
 
@@ -95,13 +95,13 @@ def reconstruct_image(patches, canvas, img_type="original"):
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="LIN")
-    parser.add_argument("-root", type=str, help="path to data", default='data/lane_detected/Training/Raw/c_1280_720_night_train_1')
-    parser.add_argument("-csv", type=str, help="path to csv", default='image_paths_vid.csv')
-    parser.add_argument("-model_pth", type=str, help="path to model pth", default='result/exp_3/006_0.550.pth')
-    parser.add_argument("-video_name", type=str, help="video name", default='output_video.mp4')
-    parser.add_argument("-version", type=int, help="video version", default=2)
-    parser.add_argument("-img_height", type=int, help="img_height", default=1280)
-    parser.add_argument("-img_width", type=int, help="img_height", default=720)
+    parser.add_argument("--root", type=str, help="path to data", default='data/lane_detected/Training/Raw/c_1280_720_night_train_1')
+    parser.add_argument("--csv", type=str, help="path to csv", default='image_paths_vid_2.csv')
+    parser.add_argument("--model_pth", type=str, help="path to model pth", default='result/exp_1/006_0.140.pth')
+    parser.add_argument("--video_name", type=str, help="video name", default='output_video_2.mp4')
+    parser.add_argument("--version", type=int, help="video version", default=2)
+    parser.add_argument("--img_height", type=int, help="img_height", default=1280)
+    parser.add_argument("--img_width", type=int, help="img_height", default=720)
 
     return parser.parse_args()
 
@@ -127,7 +127,7 @@ def make_video(args):
     
     save_dir = f'report/video_{args.version}'
     kernel = np.ones((15,15),np.uint8)
-    FPS = 10
+    FPS = 2
     fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
     video = cv2.VideoWriter(f'output_video_{args.version}.mp4', fourcc, float(FPS), ((args.img_height // 224) * 224, (args.img_width // 224) * 224))
     j = 0

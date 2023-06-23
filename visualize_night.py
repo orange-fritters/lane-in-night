@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from torch.utils.data import random_split, DataLoader
 
-from dataload.dataset_video import LaneDataset
+from dataload.dataset_video import LaneDatasetVid
 from model.model import STM
 
 
@@ -82,7 +82,7 @@ def reconstruct_image(patches, canvas, img_type="original"):
     elif img_type == "estimation":
         for (i, j), patch in patches.items():
             for k in range(4):
-                patch[k] = ((patch[k] > 0.5) * 255).astype(np.uint8)
+                patch[k] = ((patch[k] > 0.35) * 255).astype(np.uint8)
                 canvas[k][i*224:(i+1)*224, j*224:(j+1)*224] = patch[k]
     else : # image type == ground_truth
         for (i, j), patch in patches.items():
@@ -99,12 +99,10 @@ def get_arguments():
 
 
 def visualize(args):
-
-    DATA_ROOT = 'data/lane_detected/Training/Raw/c_1280_720_night_train_1'
     IMSET = 'image_paths_2.csv'
-
+    DATA_ROOT = '/home/mindong/lane-in-night/data'
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    dataset = LaneDataset(DATA_ROOT, IMSET, to_crop=False, test=True)
+    dataset = LaneDatasetVid(DATA_ROOT, IMSET, to_crop=False, test=True)
     train_size = int(0.9 * len(dataset))  # 80% for training
     val_size = len(dataset) - train_size  # Remaining 20% for validation
 
@@ -124,7 +122,7 @@ def visualize(args):
     
     model.eval()
     for iter, data in enumerate(test_loader):
-        if iter == 50:
+        if iter == 5:
             break
         original_frames, estimated_masks, ground_truth = {}, {}, {}
         img_height, img_width = data['img']
@@ -146,10 +144,10 @@ def visualize(args):
         estimated_masks = reconstruct_image(estimated_masks, estimates, img_type="estimation")
         ground_truth = reconstruct_image(ground_truth, ground_truths, img_type="ground_truth")
 
-        if not os.path.exists("report/results_night_fine_tuned"):
-            os.makedirs("report/results_night_fine_tuned")
+        if not os.path.exists("report/results_final"):
+            os.makedirs("report/results_final")
 
-        save_dir = f"report/results_night_fine_tuned/res_{iter}"
+        save_dir = f"report/results_final/res_{iter}"
         os.makedirs(save_dir, exist_ok=True)
 
         for i in range(4):

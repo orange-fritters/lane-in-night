@@ -12,8 +12,8 @@ import numpy as np
 import time
 import argparse
 
-from dataload.dataset_video import LaneDataset
-from model.model import STM
+from dataload.dataset_video import LaneDatasetVid
+from model.model_h import STM
 
 
 def get_arguments():
@@ -210,7 +210,7 @@ def train(args):
     IMSET = args.imset
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    dataset = LaneDataset(DATA_ROOT, IMSET)
+    dataset = LaneDatasetVid(DATA_ROOT, IMSET)
     train_size = int(0.8 * len(dataset))  # 80% for training
     val_size = len(dataset) - train_size  # Remaining 20% for validation
 

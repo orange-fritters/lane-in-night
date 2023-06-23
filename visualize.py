@@ -9,6 +9,7 @@ from model.model import STM
 
 
 def load_model(model, optimizer, load_path):
+    # checkpoint = torch.load(load_path, map_location=torch.device('cpu'))
     checkpoint = torch.load(load_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -81,7 +82,7 @@ def reconstruct_image(patches, canvas, img_type="original"):
     elif img_type == "estimation":
         for (i, j), patch in patches.items():
             for k in range(4):
-                patch[k] = ((patch[k] > 0.5) * 255).astype(np.uint8)
+                patch[k] = ((patch[k] > 0.1) * 255).astype(np.uint8)
                 canvas[k][i*224:(i+1)*224, j*224:(j+1)*224] = patch[k]
     else : # image type == ground_truth
         for (i, j), patch in patches.items():
@@ -96,6 +97,7 @@ if __name__ == "__main__":
     IMSET = 'image_paths.csv'
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cpu")
     dataset = LaneDataset(DATA_ROOT, IMSET, to_crop=False, test=True)
     train_size = int(0.9 * len(dataset))  # 80% for training
     val_size = len(dataset) - train_size  # Remaining 20% for validation
@@ -103,19 +105,27 @@ if __name__ == "__main__":
     # Split the dataset into training and validation subsets
     _, test_dataset = random_split(dataset, [train_size, val_size])
 
+    # test_loader = DataLoader(test_dataset,
+    #                         batch_size=1, 
+    #                         num_workers=4,
+    #                         shuffle = True, 
+    #                         pin_memory= True)
     test_loader = DataLoader(test_dataset,
                             batch_size=1, 
-                            num_workers=4,
+                            num_workers=1,
                             shuffle = True, 
-                            pin_memory=True)
+                            pin_memory=False)
 
     model = STM()
     model.to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     model, optimizer, epoch, loss = load_model(model, optimizer, 'result/exp_1/006_0.140.pth')
+    # model, optimizer, epoch, loss = load_model(model, optimizer, 'result/new/000_2.483.pth')
     
     model.eval()
     for iter, data in enumerate(test_loader):
+        if iter == 3:
+            break
         original_frames, estimated_masks, ground_truth = {}, {}, {}
         img_height, img_width = data['img']
         for key, patch in data.items():
@@ -136,7 +146,7 @@ if __name__ == "__main__":
         estimated_masks = reconstruct_image(estimated_masks, estimates, img_type="estimation")
         ground_truth = reconstruct_image(ground_truth, ground_truths, img_type="ground_truth")
 
-        save_dir = f"report/results/res_{iter}"
+        save_dir = f"report/results_final/res_{iter}"
         os.makedirs(save_dir, exist_ok=True)
 
         for i in range(4):

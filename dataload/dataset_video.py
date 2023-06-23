@@ -15,7 +15,7 @@ import glob
 from .augmentation import AugHeavy
 
 
-class LaneDataset(data.Dataset):
+class LaneDatasetVid(data.Dataset):
     def __init__(self, 
                  root : str,  
                  imset : str,
@@ -128,5 +128,10 @@ class LaneDataset(data.Dataset):
                 points = item["data"]
                 points = np.array([(int(point['x']), int(point['y'])) for point in points], np.int32)
                 cv2.polylines(mask, [points], isClosed=False, color=1, thickness=line_thickness)
+                cv2.fillPoly(mask, [points], color=1)
+
+        dilation_size = 3
+        kernel = np.ones((dilation_size, dilation_size), np.uint8)
+        mask = cv2.dilate(mask, kernel, iterations = 1)
 
         return mask

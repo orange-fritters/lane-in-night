@@ -36,7 +36,7 @@ class Encoder_Memory(nn.Module):
         super(Encoder_Memory, self).__init__()
         self.conv1_mask = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
-        resnet = models.resnet50(pretrained=True)
+        resnet = models.resnet101(pretrained=True)
 
         self.conv1 = resnet.conv1
         self.bn1 = resnet.bn1
@@ -67,7 +67,7 @@ class Encoder_Q(nn.Module):
     def __init__(self):
         super(Encoder_Q, self).__init__()
 
-        resnet = models.resnet50(pretrained=True)
+        resnet = models.resnet101(pretrained=True)
 
         self.conv1 = resnet.conv1
         self.bn1 = resnet.bn1
@@ -104,10 +104,12 @@ class Refine(nn.Module):
         self.ResFS = ResBlock(planes, planes)
         self.ResMM = ResBlock(planes, planes)
         self.scale_factor = scale_factor
+        self.transposed_conv = nn.ConvTranspose2d(planes, planes, kernel_size=scale_factor, stride=scale_factor)
 
     def forward(self, f, pm):
         s = self.ResFS(self.convFS(f))
-        m = s + F.interpolate(pm, scale_factor=self.scale_factor, mode='bilinear', align_corners=False)
+        pm = self.transposed_conv(pm)
+        m = s + pm
         m = self.ResMM(m)
         return m
 
@@ -123,6 +125,8 @@ class Decoder(nn.Module):
 
         self.pred2 = nn.Conv2d(mdim, 2, kernel_size=(3,3), padding=(1,1), stride=1)
 
+        self.transposed_conv = nn.ConvTranspose2d(2, mdim, kernel_size=4, stride=4)
+
 
     def forward(self, r4, r3, r2):
         m4 = self.ResMM(self.convFM(r4))
@@ -130,7 +134,8 @@ class Decoder(nn.Module):
         m2 = self.RF2(r2, m3) # out: 1/4, 256
 
         p2 = self.pred2(F.relu(m2))
-        p = F.interpolate(p2, scale_factor=4, mode='bilinear', align_corners=False)
+        p = self.transposed_conv(p2)
+
         return p #, p2, p3, p4  
 
 
@@ -184,7 +189,7 @@ class STM(nn.Module):
         self.KV_Q_r4 = KeyValue(1024//scale_rate, keydim=128//scale_rate, valdim=512//scale_rate)
 
         self.Memory = Memory()
-        self.Decoder = Decoder(256,scale_rate)
+        self.Decoder = Decoder(256, scale_rate)
 
     def Pad_memory(self, mems, B):
         pad_mems = []
@@ -249,4 +254,3 @@ class STM(nn.Module):
             return self.memorize(*args, **kwargs)
         else:
             raise NotImplementedError
-        

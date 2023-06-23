@@ -1,32 +1,30 @@
 from __future__ import division
 import torch
-from torch.autograd import Variable
-from torch.utils import data
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.nn.init as init
-from torch.utils.data import random_split, DataLoader
+import pandas as pd
+from torch.utils.data import random_split, DataLoader, Subset
+from sklearn.model_selection import train_test_split
 
 import os
-import numpy as np
 import time
 import argparse
 
 from dataload.dataset import LaneDataset
-from model.model import STM
+from dataload.dataset_video import LaneDatasetVid
+from model.model_h import STM
 
 
 def get_arguments():
     parser = argparse.ArgumentParser(description="LIN")
     parser.add_argument("-root", type=str, help="path to data", default='data/train_f/data/1.Training')
     parser.add_argument("-imset", type=str, help="path to annotation", default='image_paths.csv')
-    parser.add_argument("-batch", type=int, help="batch size", default=8)
-    parser.add_argument("-log_iter", type=int, help="log per x iters", default=20)
+    parser.add_argument("-batch", type=int, help="batch size", default=6)
+    parser.add_argument("-log_iter", type=int, help="log per x iters", default=40)
     parser.add_argument("-learning_rate", type=float, help="learning rate", default=1e-4)
     parser.add_argument("-num_epochs", type=int, help="epochs", default=10)
     parser.add_argument("-num_workers", type=int, help="num workers", default=4)
     parser.add_argument("-save_dir", type=str, help="save directory", default='result/')
-    parser.add_argument("-exp_name", type=str, help="experiment name", default='exp_2')
+    parser.add_argument("-exp_name", type=str, help="experiment name", default='new')
 
     return parser.parse_args()
 
@@ -194,27 +192,55 @@ def save_model(model, optimizer, epoch, loss, args):
     }, save_path)
 
 
+def create_data_loader(args,
+                       dataset : torch.utils.data.Dataset, 
+                       ver : str):
+    
+    dataset_size = len(dataset)
+    dataset_indices = list(range(dataset_size))
+
+    train_size = int(0.8 * len(dataset))  # 80% for training
+    val_size = len(dataset) - train_size  # Remaining 20% for validation
+
+    train_indices, val_indices = train_test_split(dataset_indices, 
+                                                  test_size=val_size, 
+                                                  train_size=train_size, 
+                                                  shuffle=True)
+
+    # Using these indices, create PyTorch datasets
+    train_dataset = Subset(dataset, train_indices)
+    val_dataset = Subset(dataset, val_indices)
+
+    # Save indices to CSV files
+    pd.Series(train_indices).to_csv(f"{args.exp_name}_train_indices_{ver}.csv")
+    pd.Series(val_indices).to_csv(f"{args.exp_name}_val_indices_{ver}.csv")
+
+    # Now, create your data loaders
+    train_loader = DataLoader(train_dataset,
+                            batch_size=args.batch,
+                            num_workers=args.num_workers,
+                            shuffle=True,
+                            pin_memory=True)
+
+    val_loader = DataLoader(val_dataset,
+                            batch_size=args.batch,
+                            num_workers=args.num_workers,
+                            pin_memory=True)
+    return train_loader, val_loader
+
 def train(args):
     DATA_ROOT = args.root
     IMSET = args.imset
 
+    IMSET1 = "image_paths.csv"
+    IMSET2 = "image_paths_2.csv"
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     dataset = LaneDataset(DATA_ROOT, IMSET)
-    train_size = int(0.8 * len(dataset))  # 80% for training
-    val_size = len(dataset) - train_size  # Remaining 20% for validation
+    dataset2 = LaneDatasetVid(DATA_ROOT, IMSET2)
 
-# Split the dataset into training and validation subsets
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-
-    train_loader = DataLoader(train_dataset,
-                                batch_size=args.batch, 
-                                num_workers=args.num_workers,
-                                shuffle = True, 
-                                pin_memory=True)
-    val_loader = DataLoader(val_dataset,
-                                batch_size=args.batch,
-                                num_workers=args.num_workers,
-                                pin_memory=True)
+    train_loader, val_loader = create_data_loader(args, dataset, "1")
+    train_loader2, val_loader2 = create_data_loader(args, dataset2, "2")
     
     model = STM()
     model.to(device=device)
@@ -228,31 +254,44 @@ def train(args):
     print("[] Train start...")
     best_val_loss = 1000
     for epoch in range(start_epoch, args.num_epochs):
-        train_loss, train_time = train_epoch(args,
-                                             model, 
-                                             train_loader, 
-                                             optimizer, 
-                                             loss_type, 
-                                             epoch, 
-                                             device, 
+        train_loss1, train_time1 = train_epoch(args,
+                                               model, 
+                                               train_loader, 
+                                               optimizer, 
+                                               loss_type, 
+                                               epoch, 
+                                               device, 
                                              )
-        val_loss, val_time = validate(model, 
-                                      val_loader,
-                                      val_loss_type,
-                                      epoch,
-                                      device)
-
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        train_loss2, train_time2 = train_epoch(args,
+                                               model, 
+                                               train_loader2, 
+                                               optimizer, 
+                                               loss_type, 
+                                               epoch, 
+                                               device, 
+                                                )
+        val_loss1, val_time1 = validate(model, 
+                                        val_loader,
+                                        val_loss_type,
+                                        epoch,
+                                        device)
+        val_loss2, val_time2 = validate(model,
+                                        val_loader2,
+                                        val_loss_type,
+                                        epoch,
+                                        device)
+        
+        if val_loss1 + val_loss2 < best_val_loss:
+            best_val_loss =val_loss1 + val_loss2
             print("New Best model ...")
-            save_model(model, optimizer, epoch, val_loss, args)
+            save_model(model, optimizer, epoch, val_loss1 + val_loss2, args)
 
         print(
             f'Epoch=[{epoch + 1:2d}/{args.num_epochs:2d}] '
-            f'TrainLoss={train_loss:.3f} '
-            f'ValLoss={val_loss:.3f} '
-            f'TrainTime={int(train_time)}s '
-            f'ValTime={int(val_time)}s '
+            f'TrainLoss={train_loss1:.3f}, {train_loss2:.3f} '
+            f'ValLoss={val_loss1:.3f}, {val_loss2:.3f} '
+            f'TrainTime={int(train_time1 + train_time2)}s '
+            f'ValTime={int(val_time1 + val_time2)}s '
         )
 
 
